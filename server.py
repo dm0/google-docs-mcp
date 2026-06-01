@@ -470,6 +470,24 @@ def docs_list(query: str = "", limit: int = 20) -> str:
     creds = docs_edit._load_creds()
     drive = build("drive", "v3", credentials=creds)
 
+    use_drive = os.environ.get("GOOGLE_DOCS_USE_DRIVE", "false").lower() == "true"
+    drive_id = os.environ.get("GOOGLE_DOCS_DRIVE_ID", None)
+    drive_kwargs: dict[str, str | bool] = {}
+    if drive_id is not None:
+        use_drive = True
+        drive_kwargs = {
+            **drive_kwargs,
+            "corpora": "drive",
+            "driveId": drive_id
+        }
+    if use_drive:
+        drive_kwargs = {
+            **drive_kwargs,
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True
+        }
+
+
     q = 'mimeType="application/vnd.google-apps.document" and trashed=false'
     if query:
         q += f' and fullText contains "{query}"'
@@ -479,6 +497,7 @@ def docs_list(query: str = "", limit: int = 20) -> str:
         pageSize=min(limit, 100),
         fields="files(id, name, modifiedTime, webViewLink)",
         orderBy="modifiedTime desc",
+        **drive_kwargs
     ).execute()
 
     files = results.get("files", [])
