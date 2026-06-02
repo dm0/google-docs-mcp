@@ -362,6 +362,19 @@ def _build_bookmark_jump_url(doc_id: str, bookmark_id: str) -> str:
 # Document structure helpers
 # ---------------------------------------------------------------------------
 
+HEADING_LEVELS = {
+    "TITLE": "Title",
+    "SUBTITLE": "Subtitle",
+    "HEADING_1": "H1",
+    "HEADING_2": "H2",
+    "HEADING_3": "H3",
+    "HEADING_4": "H4",
+    "HEADING_5": "H5",
+    "HEADING_6": "H6",
+    "NORMAL_TEXT": "Text" # Should never appear in result
+}
+HEADING_ORDER = dict(zip(HEADING_LEVELS.values(), range(len(HEADING_LEVELS))))
+
 @dataclass
 class TextRun:
     text: str
@@ -377,6 +390,16 @@ class Paragraph:
     end: int     # End of paragraph (exclusive)
     runs: list[TextRun]
 
+@dataclass
+class DocumentSection:
+    title: str
+    id: str
+    level: str
+    ancestor_ids: list[str]
+
+    @property
+    def level_index(self) -> int:
+        return HEADING_ORDER.get(self.level, len(HEADING_LEVELS))
 
 @dataclass
 class InlineStyleSpan:
@@ -423,6 +446,51 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
             runs=runs,
         ))
     return paragraphs
+
+
+def _get_doc_hierarchy(doc: dict) -> list[DocumentSection]:
+    """Extract document hierarchy from a Docs API response."""
+    sections: list[DocumentSection] = []
+    stack: list[DocumentSection] = []
+
+    for elem in doc.get("body", {}).get("content", []):
+        if "paragraph" not in elem:
+            continue
+        para = elem["paragraph"]
+        par_style = para.get("paragraphStyle", {})
+
+        heading_id = par_style.get("headingId")
+        if heading_id is None:
+            continue
+
+        content = ""
+        for pe in para.get("elements", []):
+            if "textRun" not in pe:
+                continue
+            content = pe["textRun"]["content"]
+
+        style = par_style.get("namedStyleType", "NORMAL_TEXT")
+        section = DocumentSection(
+            title=content.rstrip("\n"),
+            id=heading_id,
+            level=HEADING_LEVELS[style],
+            ancestor_ids = []
+        )
+
+        sections.append(section)
+        # Nest under correct parent
+        if len(stack) > 0:
+            # Traverse up
+            if stack[-1].level_index > section.level_index:
+                while len(stack) > 0 and stack[-1].level_index >= section.level_index:
+                    stack.pop()
+            # The same level => replace top stack entry
+            elif stack[-1].level_index == section.level_index:
+                stack.pop()
+        section.ancestor_ids = [s.id for s in stack]
+        stack.append(section)
+
+    return sections
 
 
 def _build_full_text_map(paragraphs: list[Paragraph]) -> tuple[str, list[tuple[int, int, int]]]:
@@ -711,6 +779,27 @@ def get(doc_id: str) -> dict:
         ],
         "plain_text": "\n".join(p.text for p in paragraphs),
     }
+
+
+def get_tree(doc_id: str) -> list[DocumentSection]:
+    """
+    Fetch a Google Doc and return structured representation.
+
+    Returns:
+        [
+            {
+            "title": "Section Title",
+            "id": "section-id",
+            "level": "H1",
+            "ancestor_ids": [...]
+            },
+            ...
+        ]
+    """
+    service = _get_service("docs", "v1")
+    doc = _get_document(service, doc_id)
+
+    return _get_doc_hierarchy(doc)
 
 
 def search_replace(

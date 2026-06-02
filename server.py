@@ -34,6 +34,7 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
 
 from __future__ import annotations
+from dataclasses import asdict
 
 import json
 import logging
@@ -88,7 +89,23 @@ All edits preserve version history. Use short, distinctive anchor_text
 
 
 @mcp.tool
-def docs_get(doc_id: str) -> str:
+def docs_get_tree(doc_id: str) -> str:
+    """
+    Read a Google Doc and return its structure as JSON.
+
+    Returns title and a hierarchical list of headings (with text, style,
+    start/end indices and unique ids).
+    Use this before editing to understand the document.
+
+    Args:
+        doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
+    """
+    result = docs_edit.get_tree(doc_id)
+    return json.dumps(result, indent=2, default=asdict)
+
+
+@mcp.tool
+def docs_read(doc_id: str) -> str:
     """
     Read a Google Doc and return its structure as JSON.
 
