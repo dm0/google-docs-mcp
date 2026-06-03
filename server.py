@@ -34,6 +34,9 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
 
 from __future__ import annotations
+from itertools import chain
+from models import DocumentTreeSection
+from pydantic import RootModel
 from dataclasses import asdict
 
 import json
