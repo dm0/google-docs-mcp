@@ -52,7 +52,7 @@ from pathlib import Path
 from typing import Optional
 
 # isort: split
-from models import DocumentSection, HEADING_LEVELS, GoogleDocument, GoogleDocumentParagraph, GoogleDocumentTextRun
+from models import DocumentSection, HEADING_LEVELS, GoogleDocument, GoogleDocumentParagraph, GoogleDocumentTextRun, GoogleDocumentNamedStyleType
 
 log = logging.getLogger("docs_edit")
 
@@ -437,7 +437,7 @@ def _parse_document_tree(doc: dict) -> list[DocumentSection]:
     last: DocumentSection = DocumentSection(
         title="",
         id="",
-        level=HEADING_LEVELS["NORMAL_TEXT"],
+        level=GoogleDocumentNamedStyleType.NORMAL_TEXT.compact,
         markdown=""
     )
     top_level: list[DocumentSection] = [last]
@@ -445,25 +445,25 @@ def _parse_document_tree(doc: dict) -> list[DocumentSection]:
     google_doc = GoogleDocument.model_validate(doc)
 
 
-    # TODO parse content as markdown
     for elem in google_doc.body.content:
         if not isinstance(elem, GoogleDocumentParagraph):
+            last.markdown += elem.to_markdown(google_doc)
             continue
-        if elem.paragraphStyle.headingId is None:
+        if elem.paragraph_style.heading_id is None:
+            last.markdown += elem.to_markdown(google_doc)
             continue
 
-        content = ""
-        for pe in elem.elements:
-            if not isinstance(pe, GoogleDocumentTextRun):
-                continue
-            content = pe.content
+        content = "".join([
+            pe.content for pe in elem.elements
+            if isinstance(pe, GoogleDocumentTextRun)
+        ])
 
         section = DocumentSection(
-            title=content.rstrip("\n"), # TODO: move to validation logic
-            id=elem.paragraphStyle.headingId,
-            level=HEADING_LEVELS[elem.paragraphStyle.namedStyleType.value],
+            title=content, # TODO: move to validation logic
+            id=elem.paragraph_style.heading_id,
+            level=elem.paragraph_style.named_style_type.compact,
             ancestor_ids = [],
-            markdown='',
+            markdown=elem.to_markdown(google_doc),
             children=[]
         )
 
