@@ -1,7 +1,8 @@
+from abc import abstractmethod
 from enum import Enum
 from typing import Annotated, Union, Literal
 from typing_extensions import Self
-from pydantic import BaseModel, Field, Discriminator, Tag, RootModel, model_validator, BeforeValidator
+from pydantic import BaseModel, Field, Discriminator, BeforeValidator, field_validator
 
 HEADING_LEVELS = {
     "TITLE": "Title",
@@ -12,9 +13,61 @@ HEADING_LEVELS = {
     "HEADING_4": "H4",
     "HEADING_5": "H5",
     "HEADING_6": "H6",
-    "NORMAL_TEXT": "(no heading)"
 }
-HEADING_ORDER = dict(zip(HEADING_LEVELS.values(), range(len(HEADING_LEVELS))))
+HEADING_ORDER = dict(zip(HEADING_LEVELS.keys(), range(len(HEADING_LEVELS))))
+HEADING_ORDER_COMPACT = dict(zip(HEADING_LEVELS.values(), range(len(HEADING_LEVELS))))
+
+
+class GoogleDocumentGlyphType(Enum):
+    GLYPH_TYPE_UNSPECIFIED = "GLYPH_TYPE_UNSPECIFIED"
+    NONE = "NONE"
+    DECIMAL = "DECIMAL"
+    ZERO_DECIMAL = "ZERO_DECIMAL"
+    UPPER_ALPHA = "UPPER_ALPHA"
+    ALPHA = "ALPHA"
+    UPPER_ROMAN = "UPPER_ROMAN"
+    ROMAN = "ROMAN"
+
+
+class GoogleDocumentBaselineOffset(Enum):
+    # The text's baseline offset is inherited from the parent.
+    BASELINE_OFFSET_UNSPECIFIED = "BASELINE_OFFSET_UNSPECIFIED"
+    # The text is not vertically offset.
+    NONE = "NONE"
+    # The text is vertically offset upwards (superscript).
+    SUPERSCRIPT = "SUPERSCRIPT"
+    # The text is vertically offset downwards (subscript).
+    SUBSCRIPT = "SUBSCRIPT"
+
+
+class GoogleDocumentNamedStyleType(Enum):
+    TITLE = "TITLE"
+    SUBTITLE = "SUBTITLE"
+    HEADING_1 = "HEADING_1"
+    HEADING_2 = "HEADING_2"
+    HEADING_3 = "HEADING_3"
+    HEADING_4 = "HEADING_4"
+    HEADING_5 = "HEADING_5"
+    HEADING_6 = "HEADING_6"
+    NORMAL_TEXT = "NORMAL_TEXT"
+    NAMED_STYLE_TYPE_UNSPECIFIED = "NAMED_STYLE_TYPE_UNSPECIFIED"
+
+    @property
+    def compact(self) -> str:
+        return HEADING_LEVELS.get(self.value, '(no heading)')
+
+    @property
+    def level(self) -> int:
+        return HEADING_ORDER.get(self.value, len(HEADING_ORDER))
+
+
+class GoogleDocumentAlignment(Enum):
+    ALIGNMENT_UNSPECIFIED = "ALIGNMENT_UNSPECIFIED"
+    START = "START"
+    CENTER = "CENTER"
+    END = "END"
+    JUSTIFIED = "JUSTIFIED"
+
 
 class DocumentTreeSection(BaseModel):
     """A document section as appears in document tree"""
@@ -25,7 +78,7 @@ class DocumentTreeSection(BaseModel):
 
     @property
     def level_index(self) -> int:
-        return HEADING_ORDER.get(self.level, len(HEADING_LEVELS))
+        return HEADING_ORDER_COMPACT.get(self.level, len(HEADING_LEVELS))
 
 
 class DocumentSection(DocumentTreeSection):
@@ -49,67 +102,70 @@ class DocumentSection(DocumentTreeSection):
         return "\n\n".join([self.markdown, *[child.subtree_markdown() for child in self.children]])
 
 
+class GoogleDocumentRepresentableBase(BaseModel):
+    @abstractmethod
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        pass
+
+
 class GoogleDocumentImageProperties(BaseModel):
-    contentUri: str
-    sourceUri: str | None = None
+    content_uri: Annotated[str, Field(alias="contentUri")]
+    source_uri: Annotated[str | None, Field(alias="sourceUri")] = None
 
 
 class GoogleDocumentEmbeddedObject(BaseModel):
     title: str | None = None
     description: str | None = None
-    imageProperties: GoogleDocumentImageProperties | None = None
+    image_properties: Annotated[
+        GoogleDocumentImageProperties | None, Field(alias="imageProperties")
+    ] = None
 
 
 class GoogleDocumentInlineObjectProperties(BaseModel):
-    embeddedObject: GoogleDocumentEmbeddedObject
+    embedded_object: Annotated[
+        GoogleDocumentEmbeddedObject, Field(alias="embeddedObject")]
 
 
-class GoogleDocumentInlineObject(BaseModel):
-    objectId: str
-    inlineObjectProperties: GoogleDocumentInlineObjectProperties
+class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
+    object_id: Annotated[str, Field(alias="objectId")]
+    inline_object_properties: Annotated[
+        GoogleDocumentInlineObjectProperties,
+        Field(alias="inlineObjectProperties")
+    ]
 
-
-class GoogleDocumentGlyphType(Enum):
-    GLYPH_TYPE_UNSPECIFIED = "GLYPH_TYPE_UNSPECIFIED"
-    NONE = "NONE"
-    DECIMAL = "DECIMAL"
-    ZERO_DECIMAL = "ZERO_DECIMAL"
-    UPPER_ALPHA = "UPPER_ALPHA"
-    ALPHA = "ALPHA"
-    UPPER_ROMAN = "UPPER_ROMAN"
-    ROMAN = "ROMAN"
-
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        embedded_obj = self.inline_object_properties.embedded_object
+        img_props = embedded_obj.image_properties
+        if img_props is None:
+            return ""
+        return f"![{embedded_obj.title or ''}]({img_props.content_uri})"
 
 
 class GoogleDocumentNestingLevel(BaseModel):
-    glyphFormat: str
-    glyphSymbol: str | None = None
-    glyphType: GoogleDocumentGlyphType = GoogleDocumentGlyphType.GLYPH_TYPE_UNSPECIFIED
+    glyph_format: Annotated[str, Field(alias="glyphFormat")]
+    glyph_symbol: Annotated[str | None, Field(alias="glyphSymbol")] = None
+    glyph_type: Annotated[
+        GoogleDocumentGlyphType, Field(alias="glyphType")
+    ] = GoogleDocumentGlyphType.GLYPH_TYPE_UNSPECIFIED
 
 
 class GoogleDocumentListProperties(BaseModel):
-    nestingLevels: list[GoogleDocumentNestingLevel]
+    nesting_levels: Annotated[
+        list[GoogleDocumentNestingLevel], Field(alias="nestingLevels")]
 
 
 class GoogleDocumentList(BaseModel):
-    listProperties: GoogleDocumentListProperties
+    list_properties: Annotated[
+        GoogleDocumentListProperties, Field(alias="listProperties")]
 
 
-class GoogleDocumentStructuralElement(BaseModel):
+class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
     type: Literal["base"] = "base"
-    startIndex: int = 0
-    endIndex: int = 0
+    start_index: Annotated[int, Field(alias="startIndex")] = 0
+    end_index: Annotated[int, Field(alias="endIndex")] = 0
 
-
-class GoogleDocumentBaselineOffset(Enum):
-    # The text's baseline offset is inherited from the parent.
-    BASELINE_OFFSET_UNSPECIFIED = "BASELINE_OFFSET_UNSPECIFIED"
-    # The text is not vertically offset.
-    NONE = "NONE"
-    # The text is vertically offset upwards (superscript).
-    SUPERSCRIPT = "SUPERSCRIPT"
-    # The text is vertically offset downwards (subscript).
-    SUBSCRIPT = "SUBSCRIPT"
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return ""
 
 
 class GoogleDocumentLink(BaseModel):
@@ -120,58 +176,106 @@ class GoogleDocumentTextStyle(BaseModel):
     italic: bool = False
     underline: bool = False
     strikethrough: bool = False
-    smallCaps: bool = False
-    baselineOffset: GoogleDocumentBaselineOffset = GoogleDocumentBaselineOffset.BASELINE_OFFSET_UNSPECIFIED
+    small_caps: Annotated[bool, Field(alias="smallCaps")] = False
+    baseline_offset: Annotated[
+        GoogleDocumentBaselineOffset, Field(alias="baselineOffset")
+    ] = GoogleDocumentBaselineOffset.BASELINE_OFFSET_UNSPECIFIED
     link: GoogleDocumentLink | None = None
+
+    @property
+    def format_string(self) -> str:
+        md_markers = {
+            "bold": ("**", "**"),
+            "italic": ("_", "_"),
+            "strikethrough": ("~~", "~~"),
+            "link": ("[", "]({link})")
+        }
+        html_markers = {
+            "bold": ("<b>", "</b>"),
+            "italic": ("<i>", "</i>"),
+            "underline": ("<u>", "</u>"),
+            "strikethrough": ("<s>", "</s>"),
+            "small_caps": ('<span style="font-variant: small-caps;">', "</span>"),
+            "subscript": ("<sub>", "</sub>"),
+            "superscript": ("<sup>", "</sup>"),
+            "link": (f'<a href="{self.link and self.link.url}">', "</a>")
+        }
+
+        collected = []
+        for name in html_markers:
+            if getattr(self, name, False):
+                collected.append(name)
+        if self.baseline_offset == GoogleDocumentBaselineOffset.SUBSCRIPT:
+            collected.append("subscript")
+        if self.baseline_offset == GoogleDocumentBaselineOffset.SUPERSCRIPT:
+            collected.append("superscript")
+
+        if set(collected).issubset(md_markers):
+            markers = md_markers
+        else:
+            markers = html_markers
+
+        format = '{text}'
+        for name in collected:
+            format = f'{markers[name][0]}{format}{markers[name][1]}'
+        return format
 
 class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
     type: Literal["textRun"] = "textRun"
     content: str
-    textStyle: GoogleDocumentTextStyle
+    text_style: Annotated[
+        GoogleDocumentTextStyle, Field(alias="textStyle")]
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def remove_trailing_newline(cls, value: str) -> str:
+        return value.rstrip("\n")
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        text = self.content.replace("\u000b", "  \n")
+        if not text:
+            return text
+        orig_len = len(text)
+        text = text.lstrip()
+        start = orig_len - len(text)
+        text = text.rstrip()
+        end = len(text) + start
+        return (
+            f"{self.content[:start]}"
+            f"{self.text_style.format_string.format(text=text)}"
+            f"{self.content[end:]}"
+        )
 
 
 class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
     type: Literal["horizontalRule"] = "horizontalRule"
-    textStyle: GoogleDocumentTextStyle
+    text_style: Annotated[GoogleDocumentTextStyle, Field(alias="textStyle")]
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return "\n---\n"
 
 
 class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
     type: Literal["inlineObjectElement"] = "inlineObjectElement"
-    inlineObjectId: str
-    textStyle: GoogleDocumentTextStyle
+    inline_object_id: Annotated[str, Field(alias="inlineObjectId")]
+    text_style: Annotated[GoogleDocumentTextStyle, Field(alias="textStyle")]
 
-
-class GoogleDocumentNamedStyleType(Enum):
-    TITLE = "TITLE"
-    SUBTITLE = "SUBTITLE"
-    HEADING_1 = "HEADING_1"
-    HEADING_2 = "HEADING_2"
-    HEADING_3 = "HEADING_3"
-    HEADING_4 = "HEADING_4"
-    HEADING_5 = "HEADING_5"
-    HEADING_6 = "HEADING_6"
-    NORMAL_TEXT = "NORMAL_TEXT"
-    NAMED_STYLE_TYPE_UNSPECIFIED = "NAMED_STYLE_TYPE_UNSPECIFIED"
-
-
-class GoogleDocumentAlignment(Enum):
-    ALIGNMENT_UNSPECIFIED = "ALIGNMENT_UNSPECIFIED"
-    START = "START"
-    CENTER = "CENTER"
-    END = "END"
-    JUSTIFIED = "JUSTIFIED"
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return doc.inline_objects[self.inline_object_id].to_markdown(doc)
 
 
 class GoogleDocumentParagraphStyle(BaseModel):
-    headingId: str | None = None
-    namedStyleType: GoogleDocumentNamedStyleType = GoogleDocumentNamedStyleType.NAMED_STYLE_TYPE_UNSPECIFIED
+    heading_id: Annotated[str | None, Field(alias="headingId")] = None
+    named_style_type: Annotated[
+        GoogleDocumentNamedStyleType, Field(alias="namedStyleType")
+    ] = GoogleDocumentNamedStyleType.NAMED_STYLE_TYPE_UNSPECIFIED
     alignment: GoogleDocumentAlignment = GoogleDocumentAlignment.ALIGNMENT_UNSPECIFIED
 
 
 class GoogleDocumentBullet(BaseModel):
-    listId: str
-    nestingLevel: int = 0
-    textStyle: GoogleDocumentTextStyle
+    list_id: Annotated[str, Field(alias="listId")]
+    nesting_level: Annotated[int, Field(alias="nestingLevel")] = 0
+    text_style: Annotated[GoogleDocumentTextStyle, Field(alias="textStyle")]
 
 
 def _unnest_paragraph_element(data: dict) -> dict:
@@ -207,9 +311,37 @@ GoogleDocumentParagraphElement = Annotated[
 class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
     type: Literal["paragraph"] = "paragraph"
     elements: list[GoogleDocumentParagraphElement]
-    paragraphStyle: GoogleDocumentParagraphStyle
+    paragraph_style: Annotated[
+        GoogleDocumentParagraphStyle, Field(alias="paragraphStyle")]
     bullet: GoogleDocumentBullet | None = None
 
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        style = self.paragraph_style
+        text = "".join([el.to_markdown(doc) for el in self.elements])
+        if style.heading_id:
+            prefix = "#" * (style.named_style_type.level + 1)
+            return f"{prefix} <a id={style.heading_id}></a>{text}\n\n"
+        if self.bullet:
+            list_props = doc.lists[self.bullet.list_id]
+            level = self.bullet.nesting_level
+            level_props = list_props.list_properties.nesting_levels[level]
+            if level_props.glyph_type == GoogleDocumentGlyphType.GLYPH_TYPE_UNSPECIFIED or level_props.glyph_symbol:
+                text = f"{' ' * level}- {text}"
+            else:
+                text = f"{' ' * level}1. {text}"
+            return f"{text}\n"
+
+        match style.alignment:
+            case GoogleDocumentAlignment.CENTER:
+                return f'<p style="text-align: center;">{text}</p>'
+            case GoogleDocumentAlignment.JUSTIFIED:
+                return f'<p style="text-align: justify;">{text}</p>'
+            case GoogleDocumentAlignment.END:
+                return f'<p style="text-align: right;">{text}</p>'
+            case _:
+                pass
+
+        return f"{text}\n\n"
 
 def _unnest_document_content(data: dict) -> dict:
     kinds = {"paragraph", "table"}
@@ -241,34 +373,71 @@ GoogleDocumentContent = Annotated[
 
 
 class GoogleDocumentTableCellStyle(BaseModel):
-    rowSpan: int
-    columnSpan: int
+    row_span: Annotated[int, Field(alias="rowSpan")]
+    column_span: Annotated[int, Field(alias="columnSpan")]
 
 
 class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
     content: list[GoogleDocumentContent]
-    tableCellStyle: GoogleDocumentTableCellStyle
+    table_cell_style: Annotated[
+        GoogleDocumentTableCellStyle, Field(alias="tableCellStyle")
+    ]
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        content = "".join([el.to_markdown(doc) for el in self.content])
+        style = self.table_cell_style
+        row_span = (
+            f' rowspan="{style.row_span}"'
+            if style.row_span > 1 else ""
+        )
+        col_span = (
+            f' colspan="{style.column_span}"'
+            if style.column_span > 1 else ""
+        )
+        return f"<td{row_span}{col_span}>{content.rstrip()}</td>"
 
 
 class GoogleDocumentTableRow(GoogleDocumentStructuralElement):
-    tableCells: list[GoogleDocumentTableCell]
+    table_cells: Annotated[
+        list[GoogleDocumentTableCell], Field(alias="tableCells")
+    ]
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        cells = "".join([
+            cell.to_markdown(doc) for cell in self.table_cells
+        ])
+        return f"<tr>{cells}</tr>"
 
 
 class GoogleDocumentTable(GoogleDocumentStructuralElement):
     type: Literal["table"] = "table"
     rows: int
     columns: int
-    tableRows: list[GoogleDocumentTableRow]
+    table_rows: Annotated[
+        list[GoogleDocumentTableRow], Field(alias="tableRows")
+    ]
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        rows = "".join([row.to_markdown(doc) for row in self.table_rows])
+        return f"<table>{rows}</table>"
 
 
-class GoogleDocumentBody(BaseModel):
+class GoogleDocumentBody(GoogleDocumentRepresentableBase):
     content: list[GoogleDocumentContent]
+
+    def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return "".join([el.to_markdown(doc) for el in self.content])
 
 
 class GoogleDocument(BaseModel):
     title: str
     body: GoogleDocumentBody
     lists: dict[str, GoogleDocumentList]
-    inlineObjects: dict[str, GoogleDocumentInlineObject]
-    revisionId: str
+    inline_objects: Annotated[
+        dict[str, GoogleDocumentInlineObject], Field(alias="inlineObjects")
+    ]
+    revision_id: Annotated[str, Field(alias="revisionId")]
     documentId: str
+
+    def to_markdown(self) -> str:
+        return self.body.to_markdown(self)
