@@ -574,9 +574,14 @@ def _parse_rich_text(text: str) -> list[RichParagraph]:
     Parse a small markdown-like subset into paragraph/list/style instructions.
 
     Supported block forms:
-      # Heading 1
-      ## Heading 2
-      ### Heading 3
+      # Title
+      ## Subtitle
+      ### Heading 1
+      #### Heading 2
+      ##### Heading 3
+      ###### Heading 4
+      ####### Heading 5
+      ######## Heading 6
       - bullet item
       * bullet item
       1. numbered item
@@ -585,20 +590,22 @@ def _parse_rich_text(text: str) -> list[RichParagraph]:
     lines = text.split("\n")
     paragraphs: list[RichParagraph] = []
 
+    heading_map = {
+        f"{'#'  * (style.level + 1)} ": style.value
+        for style in reversed(GoogleDocumentNamedStyleType)
+        if style.level < 8
+    }
+
     for raw_line in lines:
         line = raw_line
-        style = "NORMAL_TEXT"
+        style = GoogleDocumentNamedStyleType.NORMAL_TEXT.value
         bullet_preset: Optional[str] = None
 
-        if line.startswith("### "):
-            style = "HEADING_3"
-            line = line[4:]
-        elif line.startswith("## "):
-            style = "HEADING_2"
-            line = line[3:]
-        elif line.startswith("# "):
-            style = "HEADING_1"
-            line = line[2:]
+        for prefix, h_style in heading_map.items():
+            if line.startswith(prefix):
+                style = h_style
+                line = line[len(prefix):]
+                break
         else:
             bullet_match = re.match(r"^\s*[-*]\s+(.+)$", line)
             numbered_match = re.match(r"^\s*\d+[.)]\s+(.+)$", line)
