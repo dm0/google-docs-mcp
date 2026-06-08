@@ -53,7 +53,11 @@ from pathlib import Path
 from typing import Optional
 
 # isort: split
-from models import DocumentSection, HEADING_LEVELS, GoogleDocument, GoogleDocumentParagraph, GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline, DocumentTree, DocumentSubset
+from models import (
+    DocumentSection, GoogleDocument, GoogleDocumentParagraph,
+    GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
+    DocumentTree, DocumentSubset
+)
 
 log = logging.getLogger("docs_edit")
 
