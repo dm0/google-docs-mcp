@@ -754,7 +754,7 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 # Core operations
 # ---------------------------------------------------------------------------
 
-def get(
+def read(
     doc_id: str, heading_ids: list[str] | None = None
 ) -> DocumentSubset:
     """
@@ -1422,7 +1422,7 @@ def main():
 
     try:
         if args.command == "get":
-            result = get(args.doc_id)
+            result = read(args.doc_id)
         elif args.command == "search_replace":
             result = search_replace(
                 args.doc_id, args.find, args.replace, args.occurrence, args.regex

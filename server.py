@@ -125,7 +125,7 @@ def docs_read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubs
     """
     if isinstance(heading_ids, str):
         heading_ids = [heading_ids]
-    return docs_edit.get(doc_id, heading_ids)
+    return docs_edit.read(doc_id, heading_ids)
 
 
 @mcp.tool
