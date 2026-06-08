@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from enum import Enum
-from typing import Annotated, Union, Literal
+from typing import Annotated, Union, Literal, Generator, Sequence
 from typing_extensions import Self
 from pydantic import BaseModel, Field, Discriminator, BeforeValidator, field_validator
 
@@ -69,37 +69,84 @@ class GoogleDocumentAlignment(Enum):
     JUSTIFIED = "JUSTIFIED"
 
 
-class DocumentTreeSection(BaseModel):
-    """A document section as appears in document tree"""
-    title: str
-    id: str
-    level: str
-    ancestor_ids: list[str] = []
+class DocumentOutlineItem(BaseModel):
+    """A document section (heading)"""
+
+    title: Annotated[str, Field(description="Heading title")]
+    id: Annotated[str, Field(description="Heading id")]
+    level: Annotated[str, Field(description="Heading level")]
+    ancestor_ids: Annotated[
+        list[str], Field(description="Parent headings")
+    ] = []
 
     @property
     def level_index(self) -> int:
         return HEADING_ORDER_COMPACT.get(self.level, len(HEADING_LEVELS))
 
 
-class DocumentSection(DocumentTreeSection):
+class DocumentSection(DocumentOutlineItem):
     """An extended version that includes full parsed document details"""
 
     markdown: str
     children: list[Self] = []
     parent: Annotated[Self | None, Field(exclude=True)] = None
 
-    def descendants(self):
+    def descendants(self) -> Generator[Self, None, None]:
         for child in self.children:
             yield child
             yield from child.descendants()
 
-    def subtree(self):
+    def subtree(self) -> Generator[Self, None, None]:
         yield self
         for child in self.children:
             yield from child.subtree()
 
-    def subtree_markdown(self):
+    def subtree_markdown(self) -> str:
         return "\n\n".join([self.markdown, *[child.subtree_markdown() for child in self.children]])
+
+
+
+class DocumentBase(BaseModel):
+    title: Annotated[str, Field(description="Document title")]
+    revision_id: Annotated[str, Field(description="Document revision id")]
+    document_id: Annotated[str, Field(description="Document id")]
+
+
+class DocumentOutline(DocumentBase):
+    """Document outline"""
+
+    sections: Sequence[DocumentOutlineItem] = []
+
+
+class DocumentTree(DocumentBase):
+    sections: Sequence[DocumentSection] = []
+
+
+class DocumentSubset(DocumentBase):
+    """A subset of document contents"""
+    subset_md: Annotated[
+        Sequence[str],
+        Field(
+            description="An array of Markdown strings containing the "
+                        "requested document sections. Heading lines include "
+                        "hidden HTML anchor tags (e.g., <a id='...'></a>) "
+                        "matching their structural IDs."
+        )
+    ]
+    selected_headings: Annotated[
+        Sequence[str] | None,
+        Field(
+            description="List of sections in the response or None if the "
+                        "whole document is returned"
+        )
+    ]
+    partial: Annotated[
+        bool,
+        Field(
+            description="If returned response includes only parts of the "
+                        "document"
+        )
+    ] = False
 
 
 class GoogleDocumentRepresentableBase(BaseModel):
@@ -437,7 +484,7 @@ class GoogleDocument(BaseModel):
         dict[str, GoogleDocumentInlineObject], Field(alias="inlineObjects")
     ]
     revision_id: Annotated[str, Field(alias="revisionId")]
-    documentId: str
+    document_id: Annotated[str, Field(alias="documentId")]
 
     def to_markdown(self) -> str:
         return self.body.to_markdown(self)

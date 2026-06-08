@@ -34,16 +34,12 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
 
 from __future__ import annotations
-from itertools import chain
-from models import DocumentTreeSection
-from pydantic import RootModel
-from dataclasses import asdict
+from models import DocumentOutline, DocumentSubset
 
 import json
 import logging
 import os
 import sys
-from typing import Optional
 
 # Add the docs-edit script to path (if running from the repo alongside that skill)
 # Or copy docs_edit.py here — we bundle a copy for standalone use.
@@ -60,13 +56,14 @@ mcp = FastMCP(
 Surgical Google Docs editing — search by text, never by character index.
 
 EDITING TOOLS:
-  docs_get               Read document structure (paragraphs + plain text)
-  docs_search_replace    Find and replace (occurrence-targeted or all)
-  docs_insert_after      Insert paragraph after anchor text
-  docs_insert_before     Insert paragraph before anchor text
-  docs_delete_paragraph  Delete paragraphs matching anchor text
-  docs_append            Append paragraph at end of document
-  docs_batch_replace     Multiple replacements atomically (one API call)
+    docs_get_tree          Read hierarchical document tree (headings)
+    docs_read              Read document contents (paragraphs + plain)
+    docs_search_replace    Find and replace text (occurrence-targeted or all)
+    docs_insert_after      Insert text after a specified paragraph anchor text
+    docs_insert_before     Insert text before a specified paragraph anchor text
+    docs_delete_paragraph  Delete a paragraph matching the specified anchor text
+    docs_append            Append paragraph at the end of a document or heading section
+    docs_batch_replace     Multiple replacements atomically (one API call)
 
 COMMENT TOOLS:
   docs_add_comment       Add comment anchored to specific text
@@ -79,47 +76,56 @@ DOCUMENT MANAGEMENT:
   docs_list              List recent docs (optional search query)
   docs_create            Create a new document
 
-TYPICAL WORKFLOW:
-  1. docs_get — read document to understand structure
-  2. docs_search_replace / docs_insert_after / etc. — make targeted edits
-  3. docs_get — verify changes
+SURGICAL GOOGLE DOCS EDITING WORKFLOW:
+  1. Always run 'docs_get_tree' first to inspect the structural outline and
+     gather heading IDs.
+  2. Use 'docs_read' with specific 'heading_ids' to fetch content chunks
+     instead of downloading massive documents all at once.
+  3. Identify section scopes using the HTML heading ID tags (<a id="...">) and
+     choose distinct text phrases within those sections as editing anchors.
+  4. docs_search_replace / docs_insert_after / etc. — make targeted edits
+  5. docs_get_tree / docs_read — verify changes
   For review: docs_add_comment → docs_read_comments → docs_resolve_comment
 
 All edits preserve version history. Use short, distinctive anchor_text
-(a few unique words) for reliable text matching.
+(a few unique words) for reliable text matching and combine with heading ids
+to further reduce the scope.
 """.strip(),
 )
 
 
 @mcp.tool
-def docs_get_tree(doc_id: str) -> str:
+def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
-    Read a Google Doc and return its structure as JSON.
+    Fetch the structural outline (headings only) of a Google Doc as a JSON array.
 
-    Returns title and a hierarchical list of headings (with text, style,
-    start/end indices and unique ids).
-    Use this before editing to understand the document.
+    Use this tool FIRST when encountering a document to locate target sections
+    via their heading IDs, avoiding the need to read a massive document all at
+    once.
 
     Args:
         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
     """
-    result = docs_edit.get_tree(doc_id)
-    return json.dumps(result, indent=2, default=asdict)
+    return docs_edit.get_tree(doc_id)
 
 
 @mcp.tool
-def docs_read(doc_id: str) -> str:
+def docs_read(doc_id: str, heading_ids: list[str] | None = None) -> DocumentSubset:
     """
-    Read a Google Doc and return its structure as JSON.
+    Read a Google document's content converted to Markdown.
 
-    Returns title, list of paragraphs (with text, style, start/end indices),
-    and the full plain text. Use this before editing to understand the document.
+    You can read the entire document, or isolate specific sections by passing
+    a list of target heading_ids. Isolating sections reduces token usage on
+    large files.
 
     Args:
-        doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
+        doc_id: Google Doc ID from the URL.
+        heading_ids: Optional list of heading IDs to fetch.
+            Pass null or omit this field entirely to read the whole document.
     """
-    result = docs_edit.get(doc_id)
-    return json.dumps(result, indent=2)
+    if isinstance(heading_ids, str):
+        heading_ids = [heading_ids]
+    return docs_edit.get(doc_id, heading_ids)
 
 
 @mcp.tool

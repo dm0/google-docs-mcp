@@ -35,6 +35,7 @@ Python API:
 """
 
 from __future__ import annotations
+from itertools import chain
 
 import argparse
 import json
@@ -52,7 +53,7 @@ from pathlib import Path
 from typing import Optional
 
 # isort: split
-from models import DocumentSection, HEADING_LEVELS, GoogleDocument, GoogleDocumentParagraph, GoogleDocumentTextRun, GoogleDocumentNamedStyleType
+from models import DocumentSection, HEADING_LEVELS, GoogleDocument, GoogleDocumentParagraph, GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline, DocumentTree, DocumentSubset
 
 log = logging.getLogger("docs_edit")
 
@@ -430,7 +431,7 @@ def _extract_paragraphs(doc: dict) -> list[Paragraph]:
 # def _paragraph_to_md(item: dict[str, ]):
 
 
-def _parse_document_tree(doc: dict) -> list[DocumentSection]:
+def _parse_document_tree(doc: dict) -> DocumentTree:
     """Extract document hierarchy from a Docs API response."""
 
     # Dummy section if there is text before headings
@@ -488,7 +489,12 @@ def _parse_document_tree(doc: dict) -> list[DocumentSection]:
     # Remove dummy section if empty
     if not top_level[0].markdown:
         top_level = top_level[1:]
-    return top_level
+    return DocumentTree(
+        sections=top_level,
+        title=google_doc.title,
+        revision_id=google_doc.revision_id,
+        document_id=google_doc.document_id
+    )
 
 
 def _build_full_text_map(paragraphs: list[Paragraph]) -> tuple[str, list[tuple[int, int, int]]]:
@@ -748,56 +754,57 @@ def _render_comment_with_anchor_text(comment: str, anchor_text: str) -> str:
 # Core operations
 # ---------------------------------------------------------------------------
 
-def get(doc_id: str) -> dict:
+def get(
+    doc_id: str, heading_ids: list[str] | None = None
+) -> DocumentSubset:
     """
-    Fetch a Google Doc and return structured representation.
-
-    Returns:
-        {
-          "title": "Document Title",
-          "paragraphs": [
-            {"text": "...", "style": "HEADING_1", "start": 0, "end": 45}
-          ],
-          "plain_text": "full document text..."
-        }
+    Read Google document or its parts including all nested headings.
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
-    return {
-        "title": doc.get("title", ""),
-        "paragraphs": [
-            {
-                "text": p.text,
-                "style": p.style,
-                "start": p.start,
-                "end": p.end,
-            }
-            for p in paragraphs
-        ],
-        "plain_text": "\n".join(p.text for p in paragraphs),
-    }
 
+    google_doc = _parse_document_tree(doc)
 
-def get_tree(doc_id: str) -> list[DocumentSection]:
-    """
-    Fetch a Google Doc and return structured representation.
-
-    Returns:
-        [
-            {
-            "title": "Section Title",
-            "id": "section-id",
-            "level": "H1",
-            "ancestor_ids": [...]
-            },
-            ...
+    if heading_ids is None:
+        items = [
+            section.subtree_markdown()
+            for section in google_doc.sections
         ]
+    else:
+        items = [
+            item.subtree_markdown()
+            for section in google_doc.sections
+            for item in section.subtree()
+            if item.id in heading_ids
+        ]
+
+    return DocumentSubset(
+        subset_md=items,
+        selected_headings=heading_ids,
+        partial=heading_ids is not None,
+        title=google_doc.title,
+        revision_id=google_doc.revision_id,
+        document_id=google_doc.document_id,
+    )
+
+
+def get_tree(doc_id: str) -> DocumentOutline:
+    """
+    Fetch a Google Doc and return structured representation.
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
 
-    return _parse_document_tree(doc)
+    tree = _parse_document_tree(doc)
+    flat_items = list(
+        chain.from_iterable(item.subtree() for item in tree.sections))
+
+    return DocumentOutline(
+        sections=flat_items,
+        title = tree.title,
+        revision_id=tree.revision_id,
+        document_id=tree.document_id
+    )
 
 
 def search_replace(
