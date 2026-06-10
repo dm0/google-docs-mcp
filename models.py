@@ -189,7 +189,7 @@ class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
 
 
 class GoogleDocumentNestingLevel(BaseModel):
-    glyph_format: Annotated[str, Field(alias="glyphFormat")]
+    glyph_format: Annotated[str | None, Field(alias="glyphFormat")] = None
     glyph_symbol: Annotated[str | None, Field(alias="glyphSymbol")] = None
     glyph_type: Annotated[
         GoogleDocumentGlyphType, Field(alias="glyphType")
