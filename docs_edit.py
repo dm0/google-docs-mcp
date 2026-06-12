@@ -476,7 +476,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
             level=elem.paragraph_style.named_style_type.compact,
             ancestor_ids = [],
             paragraphs=[paragraph],
-            children=[]
+            sections=[]
         )
 
         headings[section.id] = section
@@ -493,7 +493,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
 
         section.parent = parent
         if parent is not None:
-            parent.children.append(section)
+            parent.sections.append(section)
             section.ancestor_ids = [*parent.ancestor_ids, parent.id]
         else:
             top_level.append(section)

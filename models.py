@@ -98,18 +98,18 @@ class SearchResult(BaseModel):
 class DocumentSection(DocumentOutlineItem):
     """An extended version that includes full parsed document details"""
 
-    children: list[Self] = []
+    sections: list[Self] = []
     paragraphs: list[DocumentParagraph] = []
     parent: Annotated[Self | None, Field(exclude=True)] = None
 
     def descendants(self) -> Generator[Self, None, None]:
-        for child in self.children:
+        for child in self.sections:
             yield child
             yield from child.descendants()
 
     def subtree(self) -> Generator[Self, None, None]:
         yield self
-        for child in self.children:
+        for child in self.sections:
             yield from child.subtree()
 
     def _find_text(
@@ -124,7 +124,7 @@ class DocumentSection(DocumentOutlineItem):
                 results.append(SearchResult(paragraph=par, section=self))
                 if first:
                     return results
-        for child in self.children:
+        for child in self.sections:
             found = child._find_text(search, case_sensitive, first)
             results.extend(found)
             if first and len(found) > 0:
@@ -151,10 +151,10 @@ class DocumentSection(DocumentOutlineItem):
         return "".join([par.markdown for par in self.paragraphs])
 
     def subtree_markdown(self) -> str:
-        return "".join([self.markdown, *[child.subtree_markdown() for child in self.children]])
+        return "".join([self.markdown, *[child.subtree_markdown() for child in self.sections]])
 
     def subtree_text(self) -> str:
-        return "".join([self.text, *[child.subtree_text() for child in self.children]])
+        return "".join([self.text, *[child.subtree_text() for child in self.sections]])
 
 
 
