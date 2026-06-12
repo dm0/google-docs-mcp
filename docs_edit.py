@@ -56,7 +56,7 @@ from typing import Optional
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset
+    DocumentTree, DocumentSubset, DocumentParagraph
 )
 
 log = logging.getLogger("docs_edit")
@@ -443,34 +443,43 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         title="",
         id="",
         level=GoogleDocumentNamedStyleType.NORMAL_TEXT.compact,
-        markdown=""
+        paragraphs=[
+            DocumentParagraph(start_index=0, end_index=0, text='', markdown='')
+        ]
     )
     top_level: list[DocumentSection] = [last]
 
     google_doc = GoogleDocument.model_validate(doc)
 
+    headings = {}
+
 
     for elem in google_doc.body.content:
         if not isinstance(elem, GoogleDocumentParagraph):
-            last.markdown += elem.to_markdown(google_doc)
+            last.paragraphs[-1].markdown += elem.to_markdown(google_doc)
+            last.paragraphs[-1].text += elem.to_text(google_doc)
+            last.paragraphs[-1].end_index = elem.end_index
             continue
+        paragraph = DocumentParagraph(
+            start_index=elem.start_index,
+            end_index=elem.end_index,
+            text=elem.to_text(google_doc),
+            markdown=elem.to_markdown(google_doc)
+        )
         if elem.paragraph_style.heading_id is None:
-            last.markdown += elem.to_markdown(google_doc)
+            last.paragraphs.append(paragraph)
             continue
-
-        content = "".join([
-            pe.content for pe in elem.elements
-            if isinstance(pe, GoogleDocumentTextRun)
-        ])
 
         section = DocumentSection(
-            title=content, # TODO: move to validation logic
+            title=paragraph.text,
             id=elem.paragraph_style.heading_id,
             level=elem.paragraph_style.named_style_type.compact,
             ancestor_ids = [],
-            markdown=elem.to_markdown(google_doc),
+            paragraphs=[paragraph],
             children=[]
         )
+
+        headings[section.id] = section
 
         # Nest under correct parent
         parent = last
@@ -495,6 +504,7 @@ def _parse_document_tree(doc: dict) -> DocumentTree:
         top_level = top_level[1:]
     return DocumentTree(
         sections=top_level,
+        headings=headings,
         title=google_doc.title,
         revision_id=google_doc.revision_id,
         document_id=google_doc.document_id
