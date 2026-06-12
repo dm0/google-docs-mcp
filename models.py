@@ -174,6 +174,42 @@ class DocumentTree(DocumentBase):
     sections: Sequence[DocumentSection] = []
     headings: Annotated[dict[str, DocumentSection], Field(exclude=True)]
 
+    def descendants(self) -> Generator[DocumentSection, None, None]:
+        for child in self.sections:
+            yield child
+            yield from child.descendants()
+
+    def _find_text(
+        self, search: str, case_sensitive: bool = True, first: bool = False
+    ) -> list[SearchResult]:
+        if not case_sensitive:
+            search = search.lower()
+        results = []
+        for child in self.sections:
+            found = child._find_text(search, case_sensitive, first)
+            results.extend(found)
+            if first and len(found) > 0:
+                return found
+        return results
+
+    def find_first(
+        self, search: str, case_sensitive: bool = True
+    ) -> SearchResult | None:
+        results = self._find_text(search, case_sensitive, first=True)
+        return results[0] if results else None
+
+    def find_all(
+        self, search: str, case_sensitive: bool = True
+    ) -> list[SearchResult]:
+        return self._find_text(search, case_sensitive, first=False)
+
+
+    def tree_markdown(self) -> str:
+        return "".join([child.subtree_markdown() for child in self.sections])
+
+    def tree_text(self) -> str:
+        return "".join([child.subtree_text() for child in self.sections])
+
 
 class DocumentSubset(DocumentBase):
     """A subset of document contents"""
