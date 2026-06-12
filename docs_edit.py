@@ -941,7 +941,11 @@ def search_replace(
     }
 
 
-def insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict:
+# FIXME: return response as model
+def insert_after(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> dict:
     """
     Insert text as a new paragraph after the paragraph containing `anchor`.
 
@@ -949,19 +953,19 @@ def insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
+    tree = _parse_document_tree(doc)
 
-    target = None
-    for p in paragraphs:
-        if anchor.lower() in p.text.lower():
-            target = p
-            break
 
-    if target is None:
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        raise ValueError(f"Invalid heading_id: {heading_id!r}")
+
+    found = haystack.find_first(anchor, False)
+    if found is None:
         raise ValueError(f"No paragraph containing anchor: {anchor!r}")
 
     # Insert after the end of the paragraph (doc end index includes the \n)
-    insert_index = target.end - 1  # position of the terminating \n
+    insert_index = found.paragraph.end_index
 
     requests, inserted_text = _build_insert_requests(
         insert_index,
@@ -976,7 +980,7 @@ def insert_after(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict
 
     return {
         "ok": True,
-        "inserted_after": target.text[:80],
+        "inserted_after": found.paragraph.text[:80],
         "at_index": insert_index,
         "rich": rich,
         "inserted_text": inserted_text[:200],
