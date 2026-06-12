@@ -138,6 +138,7 @@ class DocumentOutline(DocumentBase):
 
 class DocumentTree(DocumentBase):
     sections: Sequence[DocumentSection] = []
+    headings: Annotated[dict[str, DocumentSection], Field(exclude=True)]
 
 
 class DocumentSubset(DocumentBase):
