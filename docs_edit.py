@@ -817,8 +817,7 @@ def get_tree(doc_id: str) -> DocumentOutline:
     doc = _get_document(service, doc_id)
 
     tree = _parse_document_tree(doc)
-    flat_items = list(
-        chain.from_iterable(item.subtree() for item in tree.sections))
+    flat_items = list(tree.descendants())
 
     return DocumentOutline(
         sections=flat_items,
