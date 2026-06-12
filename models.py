@@ -91,6 +91,10 @@ class DocumentParagraph(BaseModel):
     markdown: str
 
 
+class SearchResult(BaseModel):
+    paragraph: DocumentParagraph
+    section: 'DocumentSection'
+
 class DocumentSection(DocumentOutlineItem):
     """An extended version that includes full parsed document details"""
 
@@ -107,6 +111,36 @@ class DocumentSection(DocumentOutlineItem):
         yield self
         for child in self.children:
             yield from child.subtree()
+
+    def _find_text(
+        self, search: str, case_sensitive: bool = True, first: bool = False
+    ) -> list[SearchResult]:
+        if not case_sensitive:
+            search = search.lower()
+        results = []
+        for par in self.paragraphs:
+            text = par.text if case_sensitive else par.text.lower()
+            if search in text:
+                results.append(SearchResult(paragraph=par, section=self))
+                if first:
+                    return results
+        for child in self.children:
+            found = child._find_text(search, case_sensitive, first)
+            results.extend(found)
+            if first and len(found) > 0:
+                return found
+        return results
+
+    def find_first(
+        self, search: str, case_sensitive: bool = True
+    ) -> SearchResult | None:
+        results = self._find_text(search, case_sensitive, first=True)
+        return results[0] if results else None
+
+    def find_all(
+        self, search: str, case_sensitive: bool = True
+    ) -> list[SearchResult]:
+        return self._find_text(search, case_sensitive, first=False)
 
     @property
     def text(self):
