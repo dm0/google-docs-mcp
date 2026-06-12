@@ -84,11 +84,18 @@ class DocumentOutlineItem(BaseModel):
         return HEADING_ORDER_COMPACT.get(self.level, len(HEADING_LEVELS))
 
 
+class DocumentParagraph(BaseModel):
+    start_index: int
+    end_index: int
+    text: str
+    markdown: str
+
+
 class DocumentSection(DocumentOutlineItem):
     """An extended version that includes full parsed document details"""
 
-    markdown: str
     children: list[Self] = []
+    paragraphs: list[DocumentParagraph] = []
     parent: Annotated[Self | None, Field(exclude=True)] = None
 
     def descendants(self) -> Generator[Self, None, None]:
@@ -101,8 +108,19 @@ class DocumentSection(DocumentOutlineItem):
         for child in self.children:
             yield from child.subtree()
 
+    @property
+    def text(self):
+        return "".join([par.text for par in self.paragraphs])
+
+    @property
+    def markdown(self):
+        return "".join([par.markdown for par in self.paragraphs])
+
     def subtree_markdown(self) -> str:
-        return "\n\n".join([self.markdown, *[child.subtree_markdown() for child in self.children]])
+        return "".join([self.markdown, *[child.subtree_markdown() for child in self.children]])
+
+    def subtree_text(self) -> str:
+        return "".join([self.text, *[child.subtree_text() for child in self.children]])
 
 
 
@@ -154,6 +172,10 @@ class GoogleDocumentRepresentableBase(BaseModel):
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         pass
 
+    @abstractmethod
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        pass
+
 
 class GoogleDocumentImageProperties(BaseModel):
     content_uri: Annotated[str, Field(alias="contentUri")]
@@ -187,6 +209,10 @@ class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
             return ""
         return f"![{embedded_obj.title or ''}]({img_props.content_uri})"
 
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        embedded_obj = self.inline_object_properties.embedded_object
+        return embedded_obj.title or ''
+
 
 class GoogleDocumentNestingLevel(BaseModel):
     glyph_format: Annotated[str | None, Field(alias="glyphFormat")] = None
@@ -212,6 +238,9 @@ class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
     end_index: Annotated[int, Field(alias="endIndex")] = 0
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return ""
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
         return ""
 
 
@@ -279,19 +308,23 @@ class GoogleDocumentTextRun(GoogleDocumentStructuralElement):
         return value.rstrip("\n")
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
-        text = self.content.replace("\u000b", "  \n")
-        if not text:
-            return text
+        content = self.content.replace("\u000b", "  \n")
+        if not content:
+            return content
+        text = content
         orig_len = len(text)
         text = text.lstrip()
         start = orig_len - len(text)
         text = text.rstrip()
         end = len(text) + start
         return (
-            f"{self.content[:start]}"
+            f"{content[:start]}"
             f"{self.text_style.format_string.format(text=text)}"
-            f"{self.content[end:]}"
+            f"{content[end:]}"
         )
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        return self.content.replace("\u000b", "\n")
 
 
 class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
@@ -299,6 +332,9 @@ class GoogleDocumentHorizontalRule(GoogleDocumentStructuralElement):
     text_style: Annotated[GoogleDocumentTextStyle, Field(alias="textStyle")]
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
+        return "\n---\n"
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
         return "\n---\n"
 
 
@@ -309,6 +345,9 @@ class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         return doc.inline_objects[self.inline_object_id].to_markdown(doc)
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        return doc.inline_objects[self.inline_object_id].to_text(doc)
 
 
 class GoogleDocumentParagraphStyle(BaseModel):
@@ -390,6 +429,11 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
 
         return f"{text}\n\n"
 
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        text = "".join([el.to_text(doc) for el in self.elements])
+        return f"{text}\n\n"
+
+
 def _unnest_document_content(data: dict) -> dict:
     kinds = {"paragraph", "table"}
     present_kinds = kinds.intersection(data.keys())
@@ -443,6 +487,9 @@ class GoogleDocumentTableCell(GoogleDocumentStructuralElement):
         )
         return f"<td{row_span}{col_span}>{content.rstrip()}</td>"
 
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        return "".join([el.to_text(doc) for el in self.content])
+
 
 class GoogleDocumentTableRow(GoogleDocumentStructuralElement):
     table_cells: Annotated[
@@ -454,6 +501,12 @@ class GoogleDocumentTableRow(GoogleDocumentStructuralElement):
             cell.to_markdown(doc) for cell in self.table_cells
         ])
         return f"<tr>{cells}</tr>"
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        cells = " | ".join([
+            cell.to_text(doc) for cell in self.table_cells
+        ])
+        return f"| {cells} |"
 
 
 class GoogleDocumentTable(GoogleDocumentStructuralElement):
@@ -468,12 +521,18 @@ class GoogleDocumentTable(GoogleDocumentStructuralElement):
         rows = "".join([row.to_markdown(doc) for row in self.table_rows])
         return f"<table>{rows}</table>"
 
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        return "\n".join([row.to_text(doc) for row in self.table_rows])
+
 
 class GoogleDocumentBody(GoogleDocumentRepresentableBase):
     content: list[GoogleDocumentContent]
 
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         return "".join([el.to_markdown(doc) for el in self.content])
+
+    def to_text(self, doc: 'GoogleDocument') -> str:
+        return "".join([el.to_text(doc) for el in self.content])
 
 
 class GoogleDocument(BaseModel):
@@ -488,3 +547,6 @@ class GoogleDocument(BaseModel):
 
     def to_markdown(self) -> str:
         return self.body.to_markdown(self)
+
+    def to_text(self) -> str:
+        return self.body.to_text(self)
