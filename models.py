@@ -238,6 +238,16 @@ class DocumentSubset(DocumentBase):
     ] = False
 
 
+class InsertResponse(BaseModel):
+    """Result of text insertion request """
+
+    ok: bool
+    inserted_after: str
+    at_index: int
+    rich: bool
+    inserted_text: str
+
+
 class GoogleDocumentRepresentableBase(BaseModel):
     @abstractmethod
     def to_markdown(self, doc: 'GoogleDocument') -> str:

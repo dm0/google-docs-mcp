@@ -56,7 +56,7 @@ from typing import Optional
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset, DocumentParagraph
+    DocumentTree, DocumentSubset, DocumentParagraph, InsertResponse
 )
 
 log = logging.getLogger("docs_edit")
@@ -945,7 +945,7 @@ def search_replace(
 def insert_after(
     doc_id: str, anchor: str, text: str,
     heading_id: str | None = None, rich: bool = True
-) -> dict:
+) -> InsertResponse:
     """
     Insert text as a new paragraph after the paragraph containing `anchor`.
 
@@ -978,13 +978,13 @@ def insert_after(
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "inserted_after": found.paragraph.text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    return InsertResponse(
+        ok=True,
+        inserted_after=found.paragraph.text[:80],
+        at_index=insert_index,
+        rich=rich,
+        inserted_text=inserted_text[:200]
+    )
 
 
 def insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict:
