@@ -56,7 +56,7 @@ from typing import Optional
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset, DocumentParagraph, InsertResponse
+    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse
 )
 
 log = logging.getLogger("docs_edit")
@@ -941,28 +941,34 @@ def search_replace(
     }
 
 
-# FIXME: return response as model
 def insert_after(
     doc_id: str, anchor: str, text: str,
     heading_id: str | None = None, rich: bool = True
-) -> InsertResponse:
+) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert text as a new paragraph after the paragraph containing `anchor`.
 
     The inserted text becomes a separate paragraph (newline appended automatically).
+    The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
     tree = _parse_document_tree(doc)
 
-
     haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
     if haystack is None:
-        raise ValueError(f"Invalid heading_id: {heading_id!r}")
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document"
+        )
 
     found = haystack.find_first(anchor, False)
     if found is None:
-        raise ValueError(f"No paragraph containing anchor: {anchor!r}")
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing anchor '{anchor}' was not "
+                        f"found in the {where}"
+        )
 
     # Insert after the end of the paragraph (doc end index includes the \n)
     insert_index = found.paragraph.end_index
@@ -978,12 +984,12 @@ def insert_after(
         body={"requests": requests},
     ).execute()
 
-    return InsertResponse(
-        ok=True,
-        inserted_after=found.paragraph.text[:80],
+    return InsertSucceedResponse(
+        anchor=found.paragraph.text,
+        insert_position="before",
         at_index=insert_index,
         rich=rich,
-        inserted_text=inserted_text[:200]
+        inserted_text=inserted_text
     )
 
 

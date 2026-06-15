@@ -2,7 +2,7 @@ from abc import abstractmethod
 from enum import Enum
 from typing import Annotated, Union, Literal, Generator, Sequence
 from typing_extensions import Self
-from pydantic import BaseModel, Field, Discriminator, BeforeValidator, field_validator
+from pydantic import BaseModel, Field, Discriminator, BeforeValidator, field_validator, PlainSerializer
 
 HEADING_LEVELS = {
     "TITLE": "Title",
@@ -238,14 +238,44 @@ class DocumentSubset(DocumentBase):
     ] = False
 
 
-class InsertResponse(BaseModel):
-    """Result of text insertion request """
+class EditFailedResponse(BaseModel):
+    """A failed document edit response"""
 
-    ok: bool
-    inserted_after: str
-    at_index: int
+    ok: Literal[False] = False
+    description: Annotated[str, Field(description="Failure description")]
+
+TruncatedStr80 = Annotated[
+    str,
+    PlainSerializer(lambda v: v[:80] if v else v, return_type=str)
+]
+
+TruncatedStr200 = Annotated[
+    str,
+    PlainSerializer(lambda v: v[:200] if v else v, return_type=str)
+]
+
+
+class InsertSucceedResponse(BaseModel):
+    """Result of successfull text insertion request """
+
+    ok: Literal[True] = True
+    anchor: Annotated[
+        TruncatedStr80,
+        Field(description="A paragraph used as the anchor; the first 80 characters max")
+    ]
+    insert_position: Annotated[
+        Literal["before", "after"],
+        Field(description="Insert position relative to the anchor paragraph")
+    ]
+    at_index: Annotated[
+        int,
+        Field(description="Plain document model index the text was inserted at")
+    ]
     rich: bool
-    inserted_text: str
+    inserted_text: Annotated[
+        TruncatedStr200,
+        Field(description="Inserted text; the first 200 characters max")
+    ]
 
 
 class GoogleDocumentRepresentableBase(BaseModel):
