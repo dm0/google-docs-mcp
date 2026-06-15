@@ -993,25 +993,37 @@ def insert_after(
     )
 
 
-def insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> dict:
+def insert_before(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert text as a new paragraph before the paragraph containing `anchor`.
+    Insert text as a new paragraph after the paragraph containing `anchor`.
+
+    The inserted text becomes a separate paragraph (newline appended automatically).
+    The search can be scoped to the specified heading (and nested subheadings).
     """
     service = _get_service("docs", "v1")
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
+    tree = _parse_document_tree(doc)
 
-    target = None
-    for p in paragraphs:
-        if anchor.lower() in p.text.lower():
-            target = p
-            break
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document"
+        )
 
-    if target is None:
-        raise ValueError(f"No paragraph containing anchor: {anchor!r}")
+    found = haystack.find_first(anchor, False)
+    if found is None:
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing anchor '{anchor}' was not "
+                        f"found in the {where}"
+        )
 
     # Insert at the start of the paragraph
-    insert_index = target.start
+    insert_index = found.paragraph.start_index
 
     requests, inserted_text = _build_insert_requests(
         insert_index,
@@ -1024,13 +1036,13 @@ def insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> dic
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "inserted_before": target.text[:80],
-        "at_index": insert_index,
-        "rich": rich,
-        "inserted_text": inserted_text[:200],
-    }
+    return InsertSucceedResponse(
+        anchor=found.paragraph.text,
+        insert_position="after",
+        at_index=insert_index,
+        rich=rich,
+        inserted_text=inserted_text
+    )
 
 
 def delete_paragraph(doc_id: str, anchor: str) -> dict:
