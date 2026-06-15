@@ -34,7 +34,10 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 """
 
 from __future__ import annotations
-from models import DocumentOutline, DocumentSubset, DocumentTree, InsertResponse
+from models import (
+    DocumentOutline, DocumentSubset, DocumentTree, InsertSucceedResponse,
+    EditFailedResponse
+)
 
 import json
 import logging
@@ -160,11 +163,13 @@ def docs_search_replace(
 def docs_insert_after(
     doc_id: str, anchor: str, text: str,
     heading_id: str | None = None, rich: bool = True
-) -> InsertResponse:
+) -> InsertSucceedResponse | EditFailedResponse:
     """
     Insert a new paragraph immediately after the paragraph containing `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
+
+    The search can be scoped to the specified heading and nested subheadings.
 
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
@@ -180,24 +185,26 @@ def docs_insert_after(
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), interpret simple markdown-like formatting natively
-
-    Returns:
-        JSON with: ok, inserted_after (matched paragraph preview), at_index
     """
     return docs_edit.insert_after(doc_id, anchor, text, heading_id=heading_id, rich=rich)
 
 
 @mcp.tool
-def docs_insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -> str:
+def docs_insert_before(
+    doc_id: str, anchor: str, text: str,
+    heading_id: str | None = None, rich: bool = True
+) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert a new paragraph immediately before the paragraph containing `anchor`.
+    Insert a new paragraph immediately after the paragraph containing `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
+
+    The search can be scoped to the specified heading and nested subheadings.
 
     Rich formatting is ON by default. Set rich=False to insert literal text.
 
     Supported rich subset:
-      - # / ## / ### headings
+      - # / ## / ### / ... headings
       - - item / * item bullet lists
       - 1. item / 1) item numbered lists
       - **bold**, *italic*, ***bold italic***
@@ -206,13 +213,10 @@ def docs_insert_before(doc_id: str, anchor: str, text: str, rich: bool = True) -
         doc_id: Google Doc ID
         anchor: Text to search for to find the target paragraph
         text:   Text to insert as the new paragraph
+        heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), interpret simple markdown-like formatting natively
-
-    Returns:
-        JSON with: ok, inserted_before (matched paragraph preview), at_index
     """
-    result = docs_edit.insert_before(doc_id, anchor, text, rich=rich)
-    return json.dumps(result, indent=2)
+    return docs_edit.insert_before(doc_id, anchor, text, rich=rich)
 
 
 @mcp.tool
