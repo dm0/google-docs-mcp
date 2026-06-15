@@ -341,13 +341,7 @@ class GoogleDocumentTextStyle(BaseModel):
 
     @property
     def format_string(self) -> str:
-        md_markers = {
-            "bold": ("**", "**"),
-            "italic": ("_", "_"),
-            "strikethrough": ("~~", "~~"),
-            "link": ("[", "]({link})")
-        }
-        html_markers = {
+        markers = {
             "bold": ("<b>", "</b>"),
             "italic": ("<i>", "</i>"),
             "underline": ("<u>", "</u>"),
@@ -359,18 +353,13 @@ class GoogleDocumentTextStyle(BaseModel):
         }
 
         collected = []
-        for name in html_markers:
+        for name in markers:
             if getattr(self, name, False):
                 collected.append(name)
         if self.baseline_offset == GoogleDocumentBaselineOffset.SUBSCRIPT:
             collected.append("subscript")
         if self.baseline_offset == GoogleDocumentBaselineOffset.SUPERSCRIPT:
             collected.append("superscript")
-
-        if set(collected).issubset(md_markers):
-            markers = md_markers
-        else:
-            markers = html_markers
 
         format = '{text}'
         for name in collected:
