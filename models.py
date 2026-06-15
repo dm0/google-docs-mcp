@@ -489,11 +489,11 @@ class GoogleDocumentParagraph(GoogleDocumentStructuralElement):
 
         match style.alignment:
             case GoogleDocumentAlignment.CENTER:
-                return f'<p style="text-align: center;">{text}</p>'
+                return f'<p style="text-align: center;">{text}</p>\n'
             case GoogleDocumentAlignment.JUSTIFIED:
-                return f'<p style="text-align: justify;">{text}</p>'
+                return f'<p style="text-align: justify;">{text}</p>\n'
             case GoogleDocumentAlignment.END:
-                return f'<p style="text-align: right;">{text}</p>'
+                return f'<p style="text-align: right;">{text}</p>\n'
             case _:
                 pass
 
