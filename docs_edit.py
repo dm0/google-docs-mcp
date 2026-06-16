@@ -56,7 +56,7 @@ from typing import Optional
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse
+    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult
 )
 
 log = logging.getLogger("docs_edit")
@@ -832,6 +832,7 @@ def search_replace(
     find: str,
     replace: str,
     occurrence: int = 1,
+    heading_id: str | None = None,
     regex: bool = False,
 ) -> dict:
     """
@@ -842,6 +843,7 @@ def search_replace(
         find:       Text to find (or regex pattern if regex=True)
         replace:    Replacement text
         occurrence: Which occurrence to replace (1-based). 0 = replace all.
+        heading_id: Scope search to this heading and all nested subheadings.
         regex:      Treat `find` as a regular expression
 
     Returns:
@@ -850,7 +852,7 @@ def search_replace(
     service = _get_service("docs", "v1")
 
     # Replace-all: use the native replaceAllText API (fast, atomic)
-    if occurrence == 0 and not regex:
+    if occurrence == 0 and not regex and heading_id is None:
         result = service.documents().batchUpdate(
             documentId=doc_id,
             body={
@@ -871,37 +873,44 @@ def search_replace(
 
     # Targeted occurrence: find index manually
     doc = _get_document(service, doc_id)
-    paragraphs = _extract_paragraphs(doc)
-    full_text, text_map = _build_full_text_map(paragraphs)
-
-    # Build list of (ft_start, ft_end) tuples
-    if regex:
-        matches = [(m.start(), m.end()) for m in re.finditer(find, full_text)]
-    else:
-        matches = []
-        search_from = 0
-        while True:
-            pos = full_text.find(find, search_from)
-            if pos == -1:
-                break
-            matches.append((pos, pos + len(find)))
-            search_from = pos + 1
-
-    if not matches:
-        raise ValueError(f"Text not found in document: {find!r}")
-
-    target_idx = occurrence - 1
-    if target_idx >= len(matches):
-        raise ValueError(
-            f"Occurrence {occurrence} not found. Document has {len(matches)} occurrence(s) of {find!r}"
+    tree = _parse_document_tree(doc)
+    haystack = tree if heading_id is None else tree.headings.get(heading_id, None)
+    if haystack is None:
+        return EditFailedResponse(
+            description=f"Heading with id '{heading_id}' was not "
+                         "found in the document"
         )
 
-    ft_start, ft_end = matches[target_idx]
+    found = (
+        haystack.find_first(find, False, regex)
+        if occurrence == 1
+        else haystack.find_all(find, False, regex)
+    )
+    if not found:
+        where = 'document' if heading_id is None else 'requested heading'
+        return EditFailedResponse(
+            description=f"A paragraph containing '{text}' was not "
+                        f"found in the {where}"
+        )
 
-    doc_start = _full_text_pos_to_doc_index(ft_start, text_map)
-    doc_end = _full_text_pos_to_doc_index(ft_end - 1, text_map) + 1
+    if isinstance(found, SearchResult):
+        found = [found]
 
-    old_text = full_text[ft_start:ft_end]
+
+    target_idx = occurrence - 1
+    if target_idx >= len(found):
+        where = 'Document' if heading_id is None else 'Requested heading'
+        return EditFailedResponse(
+            description=f"Occurrence {occurrence} not found. {where} has "
+                        f"{len(found)} occurrence(s) of {find!r}"
+        )
+
+    target = found[target_idx]
+
+    doc_start = target.paragraph.start_index + target.start_index
+    doc_end = target.paragraph.start_index + target.end_index
+
+    old_text = target.paragraph.text[target.start_index:target.end_index]
 
     # Apply: delete old text, then insert replacement at same position
     requests = []
