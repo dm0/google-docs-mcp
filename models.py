@@ -285,7 +285,7 @@ TruncatedStr200 = Annotated[
 
 
 class InsertSucceedResponse(BaseModel):
-    """Result of successfull text insertion request """
+    """Result of successful text insertion request """
 
     ok: Literal[True] = True
     anchor: Annotated[
