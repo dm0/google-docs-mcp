@@ -1,3 +1,4 @@
+import re
 from abc import abstractmethod
 from enum import Enum
 from typing import Annotated, Union, Literal, Generator, Sequence
@@ -94,6 +95,8 @@ class DocumentParagraph(BaseModel):
 class SearchResult(BaseModel):
     paragraph: DocumentParagraph
     section: 'DocumentSection'
+    start_index: int
+    end_index: int
 
 class DocumentSection(DocumentOutlineItem):
     """An extended version that includes full parsed document details"""
@@ -113,34 +116,56 @@ class DocumentSection(DocumentOutlineItem):
             yield from child.subtree()
 
     def _find_text(
-        self, search: str, case_sensitive: bool = True, first: bool = False
+        self, search: str, case_sensitive: bool = True, first: bool = False,
+        regex: bool = False
     ) -> list[SearchResult]:
         if not case_sensitive:
             search = search.lower()
         results = []
         for par in self.paragraphs:
             text = par.text if case_sensitive else par.text.lower()
-            if search in text:
-                results.append(SearchResult(paragraph=par, section=self))
-                if first:
-                    return results
+            pos = 0
+            if regex:
+                    if first:
+                        if match := re.search(search, text):
+                            results.append(SearchResult(
+                                paragraph=par, section=self,
+                                start_index=match.start(), end_index=match.end()
+                            ))
+                        return results
+                    results.extend([
+                        SearchResult(
+                            paragraph=par, section=self,
+                            start_index=match.start(), end_index=match.end()
+                        ) for match in re.finditer(search, text)
+                    ])
+            else:
+                while 0 <= (pos := text.find(search, pos)) < len(text):
+                    results.append(SearchResult(
+                        paragraph=par, section=self,
+                        start_index=pos, end_index=pos + len(search)
+                    ))
+                    pos += 1
+                    if first:
+                        return results
         for child in self.sections:
-            found = child._find_text(search, case_sensitive, first)
+            found = child._find_text(search, case_sensitive, first, regex)
             results.extend(found)
             if first and len(found) > 0:
                 return found
         return results
 
     def find_first(
-        self, search: str, case_sensitive: bool = True
+        self, search: str, case_sensitive: bool = True, regex: bool = False
     ) -> SearchResult | None:
-        results = self._find_text(search, case_sensitive, first=True)
+        results = self._find_text(search, case_sensitive, first=True, regex=regex)
         return results[0] if results else None
 
     def find_all(
-        self, search: str, case_sensitive: bool = True
+        self, search: str, case_sensitive: bool = True, regex: bool = False
     ) -> list[SearchResult]:
-        return self._find_text(search, case_sensitive, first=False)
+        return self._find_text(
+            search, case_sensitive, first=False, regex=regex)
 
     @property
     def text(self):
@@ -180,28 +205,32 @@ class DocumentTree(DocumentBase):
             yield from child.descendants()
 
     def _find_text(
-        self, search: str, case_sensitive: bool = True, first: bool = False
+        self, search: str, case_sensitive: bool = True, first: bool = False,
+        regex: bool = False
     ) -> list[SearchResult]:
         if not case_sensitive:
             search = search.lower()
         results = []
         for child in self.sections:
-            found = child._find_text(search, case_sensitive, first)
+            found = child._find_text(
+                search, case_sensitive, first, regex=regex)
             results.extend(found)
             if first and len(found) > 0:
                 return found
         return results
 
     def find_first(
-        self, search: str, case_sensitive: bool = True
+        self, search: str, case_sensitive: bool = True, regex: bool = False
     ) -> SearchResult | None:
-        results = self._find_text(search, case_sensitive, first=True)
+        results = self._find_text(
+            search, case_sensitive, first=True, regex=regex)
         return results[0] if results else None
 
     def find_all(
-        self, search: str, case_sensitive: bool = True
+        self, search: str, case_sensitive: bool = True, regex: bool = False
     ) -> list[SearchResult]:
-        return self._find_text(search, case_sensitive, first=False)
+        return self._find_text(
+            search, case_sensitive, first=False, regex=regex)
 
 
     def tree_markdown(self) -> str:
