@@ -272,6 +272,10 @@ class EditFailedResponse(BaseModel):
 
     ok: Literal[False] = False
     description: Annotated[str, Field(description="Failure description")]
+    suggested_action: Annotated[
+        str,
+        Field(description="Suggested action to resolve the failure")
+    ]
 
 TruncatedStr80 = Annotated[
     str,

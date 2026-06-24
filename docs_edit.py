@@ -879,7 +879,8 @@ def search_replace(
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document"
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
         )
 
     found = (
@@ -891,7 +892,8 @@ def search_replace(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing '{find}' was not "
-                        f"found in the {where}"
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact text to search for"
         )
 
     if isinstance(found, SearchResult):
@@ -903,7 +905,8 @@ def search_replace(
         where = 'Document' if heading_id is None else 'Requested heading'
         return EditFailedResponse(
             description=f"Occurrence {occurrence} not found. {where} has "
-                        f"{len(found)} occurrence(s) of {find!r}"
+                        f"{len(found)} occurrence(s) of {find!r}",
+            suggested_action="Run docs_read to verify the exact occurrence number"
         )
 
     target = found[target_idx]
@@ -965,7 +968,8 @@ def insert_after(
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document"
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
         )
 
     found = haystack.find_first(anchor, False)
@@ -973,7 +977,8 @@ def insert_after(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing anchor '{anchor}' was not "
-                        f"found in the {where}"
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact anchor text"
         )
 
     # Insert after the end of the paragraph (doc end index includes the \n)
@@ -1017,7 +1022,8 @@ def insert_before(
     if haystack is None:
         return EditFailedResponse(
             description=f"Heading with id '{heading_id}' was not "
-                         "found in the document"
+                         "found in the document",
+            suggested_action="Run docs_get_tree to verify the exact heading id"
         )
 
     found = haystack.find_first(anchor, False)
@@ -1025,7 +1031,8 @@ def insert_before(
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
             description=f"A paragraph containing anchor '{anchor}' was not "
-                        f"found in the {where}"
+                        f"found in the {where}",
+            suggested_action="Run docs_read to verify the exact anchor text"
         )
 
     # Insert at the start of the paragraph
