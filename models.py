@@ -307,6 +307,28 @@ class InsertSucceedResponse(BaseModel):
     ]
 
 
+class ReplaceSucceedResponse(BaseModel):
+    """Result of successful text replacement request """
+
+    ok: Literal[True] = True
+    replaced: Annotated[
+        TruncatedStr80,
+        Field(description="Replaced text; the first 80 characters max")
+    ]
+    at_index: Annotated[
+        int | None,
+        Field(description="Plain document model index the text was replaced at")
+    ] = None
+    occurrences_found: Annotated[
+        int | None,
+        Field(description="Number of occurances of the search text found")
+    ] = None
+    occurrences_changed: Annotated[
+        int | None,
+        Field(description="Number of occurances that were replaced")
+    ] = None
+
+
 class GoogleDocumentRepresentableBase(BaseModel):
     @abstractmethod
     def to_markdown(self, doc: 'GoogleDocument') -> str:

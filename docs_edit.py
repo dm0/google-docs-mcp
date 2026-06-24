@@ -56,7 +56,7 @@ from typing import Optional
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
     GoogleDocumentTextRun, GoogleDocumentNamedStyleType, DocumentOutline,
-    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult
+    DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
 )
 
 log = logging.getLogger("docs_edit")
@@ -834,7 +834,7 @@ def search_replace(
     occurrence: int = 1,
     heading_id: str | None = None,
     regex: bool = False,
-) -> dict:
+) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text in a document and replace a specific occurrence.
 
@@ -842,7 +842,8 @@ def search_replace(
         doc_id:     Google Doc ID
         find:       Text to find (or regex pattern if regex=True)
         replace:    Replacement text
-        occurrence: Which occurrence to replace (1-based). 0 = replace all.
+        occurrence: Which occurrence to replace (1-based). 0 = replace all
+                    only supported if regex=False and heading_id is None.
         heading_id: Scope search to this heading and all nested subheadings.
         regex:      Treat `find` as a regular expression
 
@@ -869,7 +870,7 @@ def search_replace(
             .get("replaceAllText", {})
             .get("occurrencesChanged", 0)
         )
-        return {"ok": True, "replaced": find, "occurrences_changed": count}
+        return ReplaceSucceedResponse(replaced=find, occurrences_changed=count)
 
     # Targeted occurrence: find index manually
     doc = _get_document(service, doc_id)
@@ -889,7 +890,7 @@ def search_replace(
     if not found:
         where = 'document' if heading_id is None else 'requested heading'
         return EditFailedResponse(
-            description=f"A paragraph containing '{text}' was not "
+            description=f"A paragraph containing '{find}' was not "
                         f"found in the {where}"
         )
 
@@ -942,12 +943,8 @@ def search_replace(
         body={"requests": requests},
     ).execute()
 
-    return {
-        "ok": True,
-        "replaced": old_text,
-        "at_index": doc_start,
-        "occurrences_found": len(matches),
-    }
+    return ReplaceSucceedResponse(
+        replaced=old_text, at_index=doc_start, occurrences_found=len(found))
 
 
 def insert_after(

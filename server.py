@@ -36,7 +36,7 @@ Transport: stdio (Claude Desktop / OpenClaw MCP config)
 from __future__ import annotations
 from models import (
     DocumentOutline, DocumentSubset, DocumentTree, InsertSucceedResponse,
-    EditFailedResponse
+    EditFailedResponse, ReplaceSucceedResponse
 )
 
 import json
@@ -137,8 +137,9 @@ def docs_search_replace(
     find: str,
     replace: str,
     occurrence: int = 1,
+    heading_id: str | None = None,
     regex: bool = False,
-) -> str:
+) -> ReplaceSucceedResponse | EditFailedResponse:
     """
     Find text in a Google Doc and replace a specific occurrence.
 
@@ -148,15 +149,19 @@ def docs_search_replace(
         doc_id:     Google Doc ID
         find:       Text to search for (or regex pattern if regex=True)
         replace:    Text to replace it with
-        occurrence: Which occurrence to replace. 1 = first (default), 2 = second,
-                    0 = replace ALL occurrences.
+        occurrence: Occurrence number to replace, 1-base.
+                    1 = first , 2 = second, etc. Use 0 to replace ALL
+                    occurrences. Replace all is only supported in non regular
+                    expression mode (`regex`=False) and heading_id is None.
+        heading_id: Restrict search and replaced to this heading and its
+                    subheadings. Use docs_get_tree to find heading IDs.
         regex:      If True, treat `find` as a Python regular expression
 
     Returns:
         JSON with: ok, replaced (original text), at_index, occurrences_found
     """
-    result = docs_edit.search_replace(doc_id, find, replace, occurrence, regex)
-    return json.dumps(result, indent=2)
+    return docs_edit.search_replace(
+        doc_id, find, replace, occurrence, heading_id, regex)
 
 
 @mcp.tool
