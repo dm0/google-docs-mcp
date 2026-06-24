@@ -141,9 +141,11 @@ def docs_search_replace(
     regex: bool = False,
 ) -> ReplaceSucceedResponse | EditFailedResponse:
     """
-    Find text in a Google Doc and replace a specific occurrence.
+    Find text and replace.
 
-    Preserves document history — uses real batchUpdate, not delete-and-rewrite.
+    Preserves history using batchUpdate.
+    Replace-all (occurrence=0) is only supported if regex=False and heading_id
+    is None.
 
     Args:
         doc_id:     Google Doc ID
@@ -152,7 +154,7 @@ def docs_search_replace(
         occurrence: Occurrence number to replace, 1-base.
                     1 = first , 2 = second, etc. Use 0 to replace ALL
                     occurrences. Replace all is only supported in non regular
-                    expression mode (`regex`=False) and heading_id is None.
+                    expression mode (regex=False) and heading_id is None.
         heading_id: Restrict search and replaced to this heading and its
                     subheadings. Use docs_get_tree to find heading IDs.
         regex:      If True, treat `find` as a Python regular expression
@@ -186,7 +188,8 @@ def docs_insert_after(
 
     Args:
         doc_id: Google Doc ID
-        anchor: Text to search for to find the target paragraph
+        anchor: A unique, distinctive string of text within the target
+            paragraph. Choose a longer phrase to avoid accidental matches.
         text:   Text to insert as the new paragraph
         heading_id: Narrow down search to this heading and subheadings
         rich:   If True (default), interpret simple markdown-like formatting natively
