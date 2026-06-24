@@ -195,7 +195,7 @@ def docs_insert_before(
     heading_id: str | None = None, rich: bool = True
 ) -> InsertSucceedResponse | EditFailedResponse:
     """
-    Insert a new paragraph immediately after the paragraph containing `anchor`.
+    Insert a new paragraph immediately before the paragraph containing `anchor`.
 
     The anchor is matched case-insensitively as a substring of the paragraph.
 
