@@ -16,7 +16,9 @@ dependencies = [
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.1",
     "fastmcp>=2.0.0",
-    "pydantic~=2.13"
+    "pydantic~=2.13",
+    "mistune~=3.2",
+    "beautifulsoup4~=4.15"
 ]
 
 [project.scripts]

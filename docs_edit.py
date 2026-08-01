@@ -39,7 +39,6 @@ from itertools import chain
 
 import argparse
 import json
-import logging
 import os
 import re
 import subprocess
@@ -52,6 +51,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from fastmcp.utilities.logging import get_logger
+
 # isort: split
 from models import (
     DocumentSection, GoogleDocument, GoogleDocumentParagraph,
@@ -59,7 +60,7 @@ from models import (
     DocumentTree, DocumentSubset, DocumentParagraph, InsertSucceedResponse, EditFailedResponse, SearchResult, ReplaceSucceedResponse
 )
 
-log = logging.getLogger("docs_edit")
+log = get_logger("docs_edit")
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -689,16 +690,15 @@ def _build_insert_requests(
             cursor += 1
 
     for para, start, end, paragraph_end in paragraph_positions:
-        if para.style != "NORMAL_TEXT":
-            requests.append(
-                {
-                    "updateParagraphStyle": {
-                        "range": {"startIndex": start, "endIndex": max(end, start)},
-                        "paragraphStyle": {"namedStyleType": para.style},
-                        "fields": "namedStyleType",
-                    }
+        requests.append(
+            {
+                "updateParagraphStyle": {
+                    "range": {"startIndex": start, "endIndex": max(end, start)},
+                    "paragraphStyle": {"namedStyleType": para.style},
+                    "fields": "namedStyleType",
                 }
-            )
+            }
+        )
 
         for span in para.inline_styles:
             if span.end <= span.start:
@@ -825,6 +825,16 @@ def get_tree(doc_id: str) -> DocumentOutline:
         revision_id=tree.revision_id,
         document_id=tree.document_id
     )
+
+
+def get_full_tree(doc_id: str) -> DocumentTree:
+    """
+    Fetch a Google Doc and return structured representation.
+    """
+    service = _get_service("docs", "v1")
+    doc = _get_document(service, doc_id)
+
+    return _parse_document_tree(doc)
 
 
 def search_replace(

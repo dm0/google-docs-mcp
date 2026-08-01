@@ -61,6 +61,12 @@ class GoogleDocumentNamedStyleType(Enum):
     def level(self) -> int:
         return HEADING_ORDER.get(self.value, len(HEADING_ORDER))
 
+    @classmethod
+    def from_level(cls, level: int) -> 'GoogleDocumentNamedStyleType':
+        if level > len(HEADING_LEVELS):
+            return GoogleDocumentNamedStyleType.NORMAL_TEXT
+        return list(GoogleDocumentNamedStyleType)[level - 1]
+
 
 class GoogleDocumentAlignment(Enum):
     ALIGNMENT_UNSPECIFIED = "ALIGNMENT_UNSPECIFIED"
@@ -333,7 +339,7 @@ class ReplaceSucceedResponse(BaseModel):
     ] = None
 
 
-class GoogleDocumentRepresentableBase(BaseModel):
+class GoogleDocumentRepresentableBase(BaseModel, populate_by_name=True):
     @abstractmethod
     def to_markdown(self, doc: 'GoogleDocument') -> str:
         pass
@@ -343,12 +349,12 @@ class GoogleDocumentRepresentableBase(BaseModel):
         pass
 
 
-class GoogleDocumentImageProperties(BaseModel):
-    content_uri: Annotated[str, Field(alias="contentUri")]
+class GoogleDocumentImageProperties(BaseModel, populate_by_name=True):
+    content_uri: Annotated[str | None, Field(alias="contentUri")] = None
     source_uri: Annotated[str | None, Field(alias="sourceUri")] = None
 
 
-class GoogleDocumentEmbeddedObject(BaseModel):
+class GoogleDocumentEmbeddedObject(BaseModel, populate_by_name=True):
     title: str | None = None
     description: str | None = None
     image_properties: Annotated[
@@ -356,7 +362,7 @@ class GoogleDocumentEmbeddedObject(BaseModel):
     ] = None
 
 
-class GoogleDocumentInlineObjectProperties(BaseModel):
+class GoogleDocumentInlineObjectProperties(BaseModel, populate_by_name=True):
     embedded_object: Annotated[
         GoogleDocumentEmbeddedObject, Field(alias="embeddedObject")]
 
@@ -380,7 +386,7 @@ class GoogleDocumentInlineObject(GoogleDocumentRepresentableBase):
         return embedded_obj.title or ''
 
 
-class GoogleDocumentNestingLevel(BaseModel):
+class GoogleDocumentNestingLevel(BaseModel, populate_by_name=True):
     glyph_format: Annotated[str | None, Field(alias="glyphFormat")] = None
     glyph_symbol: Annotated[str | None, Field(alias="glyphSymbol")] = None
     glyph_type: Annotated[
@@ -388,12 +394,12 @@ class GoogleDocumentNestingLevel(BaseModel):
     ] = GoogleDocumentGlyphType.GLYPH_TYPE_UNSPECIFIED
 
 
-class GoogleDocumentListProperties(BaseModel):
+class GoogleDocumentListProperties(BaseModel, populate_by_name=True):
     nesting_levels: Annotated[
         list[GoogleDocumentNestingLevel], Field(alias="nestingLevels")]
 
 
-class GoogleDocumentList(BaseModel):
+class GoogleDocumentList(BaseModel, populate_by_name=True):
     list_properties: Annotated[
         GoogleDocumentListProperties, Field(alias="listProperties")]
 
@@ -410,10 +416,10 @@ class GoogleDocumentStructuralElement(GoogleDocumentRepresentableBase):
         return ""
 
 
-class GoogleDocumentLink(BaseModel):
+class GoogleDocumentLink(BaseModel, populate_by_name=True):
     url: str | None = None  # The only supported link type - external
 
-class GoogleDocumentTextStyle(BaseModel):
+class GoogleDocumentTextStyle(BaseModel, populate_by_name=True):
     bold: bool = False
     italic: bool = False
     underline: bool = False
@@ -505,7 +511,7 @@ class GoogleDocumentInlineObjectElement(GoogleDocumentStructuralElement):
         return doc.inline_objects[self.inline_object_id].to_text(doc)
 
 
-class GoogleDocumentParagraphStyle(BaseModel):
+class GoogleDocumentParagraphStyle(BaseModel, populate_by_name=True):
     heading_id: Annotated[str | None, Field(alias="headingId")] = None
     named_style_type: Annotated[
         GoogleDocumentNamedStyleType, Field(alias="namedStyleType")
@@ -513,7 +519,7 @@ class GoogleDocumentParagraphStyle(BaseModel):
     alignment: GoogleDocumentAlignment = GoogleDocumentAlignment.ALIGNMENT_UNSPECIFIED
 
 
-class GoogleDocumentBullet(BaseModel):
+class GoogleDocumentBullet(BaseModel, populate_by_name=True):
     list_id: Annotated[str, Field(alias="listId")]
     nesting_level: Annotated[int, Field(alias="nestingLevel")] = 0
     text_style: Annotated[GoogleDocumentTextStyle, Field(alias="textStyle")]
@@ -618,7 +624,7 @@ GoogleDocumentContent = Annotated[
 ]
 
 
-class GoogleDocumentTableCellStyle(BaseModel):
+class GoogleDocumentTableCellStyle(BaseModel, populate_by_name=True):
     row_span: Annotated[int, Field(alias="rowSpan")]
     column_span: Annotated[int, Field(alias="columnSpan")]
 
@@ -690,7 +696,7 @@ class GoogleDocumentBody(GoogleDocumentRepresentableBase):
         return "".join([el.to_text(doc) for el in self.content])
 
 
-class GoogleDocument(BaseModel):
+class GoogleDocument(BaseModel, populate_by_name=True):
     title: str
     body: GoogleDocumentBody
     lists: dict[str, GoogleDocumentList]

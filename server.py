@@ -97,6 +97,21 @@ to further reduce the scope.
 )
 
 
+# @mcp.tool
+# def docs_full_tree(doc_id: str) -> DocumentTree:
+#     """
+#     Fetch a Google Doc and return structured representation.
+
+#     Use this tool FIRST when encountering a document to locate target sections
+#     via their heading IDs, avoiding the need to read a massive document all at
+#     once.
+
+#     Args:
+#         doc_id: Google Doc ID (from the URL: /document/d/{DOC_ID}/edit)
+#     """
+#     return docs_edit.get_full_tree(doc_id)
+
+
 @mcp.tool
 def docs_get_tree(doc_id: str) -> DocumentOutline:
     """
